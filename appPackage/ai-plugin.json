@@ -1,0 +1,27 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+  "schema_version": "v2.4",
+  "name_for_human": "Ansvar",
+  "namespace": "ansvar",
+  "description_for_human": "Retrieves European and US law, regulation, and standards with citations.",
+  "description_for_model": "Tools for retrieving European and United States law, regulation, standards, security and privacy frameworks, and case law from corpora built out of official publishers, and for running structured compliance workflows.\n\nCall these tools whenever the user asks about a legal obligation, a regulation or directive, a national implementing act, a technical or security standard, a control framework, case law, regulator guidance, or what compliance with any of these requires. Also call them for questions about known vulnerabilities and threat intelligence. Prefer them over model memory for any statement of law: they return provision text with a citation to the publisher, and answers should rest on the rows they return.\n\nThe search tool requires an explicit scope and returns an error without one. Pass at least one of jurisdictions, frameworks, sector, or sources. Derive the jurisdiction from the question, and include the EU alongside a member-state jurisdiction where the national law implements an EU instrument. Keep queries to a few keywords in the language of the target corpus rather than a full sentence, and join alternatives with OR.\n\nThe discovery tools report what is actually available rather than leaving it to be guessed: one lists the corpora, frameworks, and workflows the signed-in user can reach, and another reports that user's tier, limits, and remaining quota. Call a discovery tool first when the right scope or the correct workflow identifier is unclear, and pass the identifiers it returns rather than inventing them.\n\nThe tool surface depends on the signed-in user's subscription, so the tools are discovered at run time rather than fixed. Content that some subscriptions exclude, such as case law and regulator guidance, arrives inside ordinary search results when the user's subscription covers it.",
+  "contact_email": "support@ansvar.eu",
+  "legal_info_url": "https://ansvar.eu/terms",
+  "privacy_policy_url": "https://ansvar.eu/privacy",
+  "functions": [],
+  "runtimes": [
+    {
+      "type": "RemoteMCPServer",
+      "auth": {
+        "type": "OAuthPluginVault",
+        "reference_id": "${AUTH_CONFIG_ID}"
+      },
+      "run_for_functions": [
+        "*"
+      ],
+      "spec": {
+        "url": "https://gateway.ansvar.eu/mcp"
+      }
+    }
+  ]
+}

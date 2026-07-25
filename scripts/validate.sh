@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# Mechanical gate for the app package. Runs without AUTH_CONFIG_ID: the
+# ${AUTH_CONFIG_ID} placeholder is substituted with a dummy GUID so the
+# committed template is validated as-is.
+#
+# Checks: JSON schema conformance (app manifest 1.25, declarative agent v1.8,
+# API plugin v2.4), name consistency across all three files, store character
+# limits, content lint, and icon dimensions.
+#
+# Requires: curl, python3 with jsonschema and pillow.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PKG="$ROOT/appPackage"
+CACHE="$ROOT/.schema-cache"
+DUMMY_AUTH_CONFIG_ID="00000000-0000-0000-0000-000000000000"
+
+mkdir -p "$CACHE"
+
+fetch() {
+  local url="$1" dest="$2"
+  # An empty or non-JSON body is a failed fetch, never an implicit pass.
+  if ! curl -sSfL --retry 4 --retry-delay 3 --retry-all-errors --max-time 60 "$url" -o "$dest"; then
+    echo "FAIL: could not fetch $url" >&2
+    return 1
+  fi
+  if [[ ! -s "$dest" ]]; then
+    echo "FAIL: empty body from $url" >&2
+    return 1
+  fi
+  if ! python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$dest"; then
+    echo "FAIL: $url did not return valid JSON" >&2
+    return 1
+  fi
+  echo "  fetched $(basename "$dest") ($(wc -c <"$dest" | tr -d ' ') bytes)"
+}
+
+echo "== fetching schemas =="
+fetch "https://developer.microsoft.com/en-us/json-schemas/teams/v1.25/MicrosoftTeams.schema.json" "$CACHE/teams-1.25.json"
+fetch "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.8/schema.json" "$CACHE/da-1.8.json"
+fetch "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json" "$CACHE/plugin-2.4.json"
+
+echo "== validating package =="
+PKG="$PKG" CACHE="$CACHE" DUMMY_AUTH_CONFIG_ID="$DUMMY_AUTH_CONFIG_ID" python3 - <<'PY'
+import json
+import os
+import re
+import sys
+
+from jsonschema import Draft7Validator
+from PIL import Image
+
+PKG = os.environ["PKG"]
+CACHE = os.environ["CACHE"]
+DUMMY = os.environ["DUMMY_AUTH_CONFIG_ID"]
+
+failures = []
+
+
+def check(ok, label, detail=""):
+    print(f"  [{'PASS' if ok else 'FAIL'}] {label}{(' - ' + detail) if detail else ''}")
+    if not ok:
+        failures.append(label)
+
+
+def load(path):
+    with open(os.path.join(PKG, path), encoding="utf-8") as fh:
+        return fh.read()
+
+
+manifest_raw = load("manifest.json")
+da_raw = load("declarativeAgent.json")
+plugin_raw = load("ai-plugin.json")
+
+# The committed plugin file must still carry the placeholder, never a real
+# reference_id: the AUTH_CONFIG_ID is environment-supplied at package time.
+check("${AUTH_CONFIG_ID}" in plugin_raw, "ai-plugin.json keeps the ${AUTH_CONFIG_ID} placeholder")
+plugin_raw = plugin_raw.replace("${AUTH_CONFIG_ID}", DUMMY)
+
+manifest = json.loads(manifest_raw)
+da = json.loads(da_raw)
+plugin = json.loads(plugin_raw)
+
+# --- 1. schema conformance -------------------------------------------------
+# Known defect in the published API plugin v2.4 schema: runtime.spec is a oneOf
+# over open-api-spec / local-plugin-spec / mcp-execution-spec, but open-api-spec
+# and mcp-execution-spec both accept a bare {"url": ...}. A RemoteMCPServer using
+# dynamic tool discovery - the documented shape, spec.url with no
+# mcp_tool_description - therefore matches two branches and fails oneOf. Every
+# conformant remote-MCP plugin hits this, so it is not specific to this package.
+# Relaxing the branch to anyOf loses no strictness here: check 1b below validates
+# each runtime's spec against the single subschema its declared type selects.
+SPEC_BRANCH_BY_RUNTIME_TYPE = {
+    "OpenApi": "open-api-spec",
+    "LocalPlugin": "local-plugin-spec",
+    "RemoteMCPServer": "mcp-execution-spec",
+}
+
+
+def relax_ambiguous_spec_oneof(schema):
+    spec = schema.get("$defs", {}).get("runtime", {}).get("properties", {}).get("spec", {})
+    if "oneOf" in spec:
+        spec["anyOf"] = spec.pop("oneOf")
+        return True
+    return False
+
+
+for name, doc, schema_file in (
+    ("manifest.json", manifest, "teams-1.25.json"),
+    ("declarativeAgent.json", da, "da-1.8.json"),
+    ("ai-plugin.json", plugin, "plugin-2.4.json"),
+):
+    with open(os.path.join(CACHE, schema_file), encoding="utf-8") as fh:
+        schema = json.load(fh)
+    relaxed = schema_file.startswith("plugin-") and relax_ambiguous_spec_oneof(schema)
+    errors = sorted(Draft7Validator(schema).iter_errors(doc), key=lambda e: list(e.path))
+    check(
+        not errors,
+        f"{name} conforms to {schema_file}" + (" (spec oneOf relaxed to anyOf)" if relaxed else ""),
+        "; ".join(f"{'/'.join(map(str, e.path)) or '<root>'}: {e.message}" for e in errors[:5]),
+    )
+
+# --- 1b. each runtime spec against the subschema its type selects -----------
+with open(os.path.join(CACHE, "plugin-2.4.json"), encoding="utf-8") as fh:
+    plugin_schema = json.load(fh)
+defs = plugin_schema["$defs"]
+for i, runtime in enumerate(plugin.get("runtimes", [])):
+    branch = SPEC_BRANCH_BY_RUNTIME_TYPE.get(runtime.get("type"))
+    if branch is None:
+        check(False, f"runtimes[{i}].type is a known runtime type", repr(runtime.get("type")))
+        continue
+    subschema = dict(defs[branch])
+    subschema["$defs"] = defs
+    errors = list(Draft7Validator(subschema).iter_errors(runtime["spec"]))
+    check(
+        not errors,
+        f"runtimes[{i}].spec conforms to {branch} for type {runtime['type']}",
+        "; ".join(e.message for e in errors[:3]),
+    )
+
+# --- 2. name consistency ---------------------------------------------------
+names = {
+    "manifest.name.short": manifest["name"]["short"],
+    "manifest.name.full": manifest["name"]["full"],
+    "declarativeAgent.name": da["name"],
+    "plugin.name_for_human": plugin["name_for_human"],
+}
+check(len(set(names.values())) == 1, "app name identical in all three files", repr(names))
+
+# --- 3. character limits ---------------------------------------------------
+limits = [
+    ("plugin.description_for_human", plugin["description_for_human"], 100),
+    ("declarativeAgent.description", da["description"], 1000),
+    ("declarativeAgent.instructions", da["instructions"], 8000),
+    ("declarativeAgent.disclaimer.text", da["disclaimer"]["text"], 500),
+    ("manifest.description.short", manifest["description"]["short"], 80),
+    ("manifest.description.full", manifest["description"]["full"], 4000),
+]
+for i, starter in enumerate(da["conversation_starters"]):
+    limits.append((f"conversation_starters[{i}].text", starter["text"], 128))
+for label, value, limit in limits:
+    check(len(value) <= limit, f"{label} within {limit} chars", f"is {len(value)}")
+
+# --- 4. content lint -------------------------------------------------------
+BANNED_WORDS = [
+    # Microsoft store review: no marketing superlatives.
+    "best", "#1", "amazing", "awesome", "world-class", "leading",
+    # Prompt-injection shaped phrases.
+    "ignore", "reset", "new instructions",
+    # ADR-009 anti-slop banned vocabulary.
+    "delve", "leverage", "utilize", "seamless", "harness", "foster", "facilitate",
+    "cutting-edge", "groundbreaking", "transformative", "holistic", "bespoke",
+    "paramount", "unparalleled", "empower", "revolutionary", "pioneering",
+    "tapestry", "realm", "testament", "multifaceted", "unleash", "underscore",
+]
+linted = {
+    "declarativeAgent.description": da["description"],
+    "declarativeAgent.instructions": da["instructions"],
+    "declarativeAgent.disclaimer.text": da["disclaimer"]["text"],
+    "plugin.description_for_human": plugin["description_for_human"],
+    "plugin.description_for_model": plugin["description_for_model"],
+}
+for i, starter in enumerate(da["conversation_starters"]):
+    linted[f"conversation_starters[{i}].text"] = starter["text"]
+    if "title" in starter:
+        linted[f"conversation_starters[{i}].title"] = starter["title"]
+
+for label, text in linted.items():
+    lowered = text.lower()
+    hits = [w for w in BANNED_WORDS if w in lowered]
+    check(not hits, f"{label} free of banned words", ", ".join(hits))
+    check(not re.search(r"https?://", text), f"{label} free of URLs")
+    # ASCII printable plus newline only: rules out emoji and symbol characters.
+    offenders = sorted({c for c in text if not (0x20 <= ord(c) <= 0x7E or c == "\n")})
+    check(not offenders, f"{label} is plain ASCII", " ".join(f"U+{ord(c):04X}" for c in offenders))
+
+# --- 5. icons --------------------------------------------------------------
+for filename, expected in (("color.png", (192, 192)), ("outline.png", (32, 32))):
+    with Image.open(os.path.join(PKG, filename)) as img:
+        check(img.size == expected, f"{filename} is {expected[0]}x{expected[1]}", f"is {img.size[0]}x{img.size[1]}")
+
+# --- 6. referenced files exist --------------------------------------------
+check(manifest["copilotAgents"]["declarativeAgents"][0]["file"] == "declarativeAgent.json",
+      "manifest references declarativeAgent.json")
+check(da["actions"][0]["file"] == "ai-plugin.json", "declarative agent references ai-plugin.json")
+for ref in (manifest["icons"]["color"], manifest["icons"]["outline"]):
+    check(os.path.isfile(os.path.join(PKG, ref)), f"icon {ref} exists in appPackage")
+
+print()
+if failures:
+    print(f"FAILED: {len(failures)} check(s): " + "; ".join(failures))
+    sys.exit(1)
+print("All checks passed.")
+PY
