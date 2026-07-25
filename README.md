@@ -48,7 +48,7 @@ AUTH_CONFIG_ID=<oauth-config-id> ./scripts/package.sh
 
 The script writes `dist/ansvar-m365-copilot.zip`. Three guards sit between a bad id and a built package:
 
-- `AUTH_CONFIG_ID` must match `^[A-Za-z0-9._-]{6,64}$`, which turns away an unset or blank value, whitespace, quotes, and angle brackets.
+- `AUTH_CONFIG_ID` must match `^[A-Za-z0-9+/=._-]{6,128}$` (the portal issues base64 registration IDs with a trailing `=`), which turns away an unset or blank value, whitespace, quotes, and angle brackets.
 - It is refused when it contains `AUTH_CONFIG`, `YOUR`, `TODO`, `PLACEHOLDER`, or `CHANGEME` in any case, and when it is the all-zero GUID that `validate.sh` uses as its dummy.
 - After substitution the script parses the result as JSON and asserts that `runtimes[0].auth.reference_id` equals the id it was handed, so a textual replace that produced invalid JSON, or that left the auth block untouched, fails the build.
 

@@ -32,8 +32,8 @@ fi
 
 # Shape check. Keeps out empty values, whitespace, quotes, angle brackets, and
 # anything long enough to be a pasted blob rather than an id.
-if [[ ! "$AUTH_CONFIG_ID" =~ ^[A-Za-z0-9._-]{6,64}$ ]]; then
-  echo "ERROR: AUTH_CONFIG_ID must match ^[A-Za-z0-9._-]{6,64}\$ (got: '$AUTH_CONFIG_ID')." >&2
+if [[ ! "$AUTH_CONFIG_ID" =~ ^[A-Za-z0-9+/=._-]{6,128}$ ]]; then
+  echo "ERROR: AUTH_CONFIG_ID must match ^[A-Za-z0-9+/=._-]{6,128}\$ (got: '$AUTH_CONFIG_ID')." >&2
   exit 1
 fi
 
