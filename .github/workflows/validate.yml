@@ -28,3 +28,44 @@ jobs:
       # validated with a dummy substitution, so CI never needs the real id.
       - name: Validate app package
         run: ./scripts/validate.sh
+
+      # Proves the packaging path works on every commit. The id below is a
+      # throwaway that satisfies the shape check; it is not a real registration,
+      # and the resulting zip is asserted then discarded, never uploaded.
+      - name: Build package with a dummy auth id
+        env:
+          AUTH_CONFIG_ID: ci0123456789abcdef
+        run: |
+          ./scripts/package.sh
+          python3 - <<'PY'
+          import json, sys, zipfile
+
+          EXPECTED = ["manifest.json", "declarativeAgent.json", "ai-plugin.json", "color.png", "outline.png"]
+          DUMMY = "ci0123456789abcdef"
+          failures = []
+
+          with zipfile.ZipFile("dist/ansvar-m365-copilot.zip") as zf:
+              names = zf.namelist()
+              if names != EXPECTED:
+                  failures.append(f"members are {names}, expected {EXPECTED}")
+              if any("/" in n for n in names):
+                  failures.append(f"members must sit at the zip root: {names}")
+              for member in [n for n in names if n.endswith(".json")]:
+                  try:
+                      json.loads(zf.read(member).decode("utf-8"))
+                  except json.JSONDecodeError as exc:
+                      failures.append(f"{member} is not valid JSON: {exc}")
+              plugin = json.loads(zf.read("ai-plugin.json").decode("utf-8"))
+              got = plugin["runtimes"][0]["auth"]["reference_id"]
+              if got != DUMMY:
+                  failures.append(f"reference_id is {got!r}, expected {DUMMY!r}")
+
+          if failures:
+            print("FAILED:", "; ".join(failures))
+            sys.exit(1)
+          print(f"zip verified: {EXPECTED} at root, JSON members parse, reference_id == {DUMMY}")
+          PY
+
+      - name: Discard the dummy artifact
+        if: always()
+        run: rm -rf dist

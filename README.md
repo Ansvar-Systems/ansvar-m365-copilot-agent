@@ -46,7 +46,15 @@ Every user authenticates as themselves, and the package carries no shared or emb
 AUTH_CONFIG_ID=<oauth-config-id> ./scripts/package.sh
 ```
 
-The script writes `dist/ansvar-m365-copilot.zip`. It refuses to run when `AUTH_CONFIG_ID` is unset, blank, or still a placeholder, so a package cannot ship with an unresolved auth reference.
+The script writes `dist/ansvar-m365-copilot.zip`. Three guards sit between a bad id and a built package:
+
+- `AUTH_CONFIG_ID` must match `^[A-Za-z0-9._-]{6,64}$`, which turns away an unset or blank value, whitespace, quotes, and angle brackets.
+- It is refused when it contains `AUTH_CONFIG`, `YOUR`, `TODO`, `PLACEHOLDER`, or `CHANGEME` in any case, and when it is the all-zero GUID that `validate.sh` uses as its dummy.
+- After substitution the script parses the result as JSON and asserts that `runtimes[0].auth.reference_id` equals the id it was handed, so a textual replace that produced invalid JSON, or that left the auth block untouched, fails the build.
+
+Those guards catch an unresolved or malformed id, not a wrong one. A well-formed id pointing at the wrong registration still builds, and only sideloading the package will show it.
+
+The zip is assembled and verified in a temp directory and moved into `dist/` only after it passes, so a failed build leaves the previous artifact where it was.
 
 ## Validating
 
@@ -58,13 +66,20 @@ The gate needs `python3` with `jsonschema` and `pillow`, plus network access to 
 
 What it checks:
 
-1. Each file against its published Microsoft schema.
+1. `manifest.json` and `declarativeAgent.json` against the unmodified published schemas. `ai-plugin.json` against the published v2.4 schema with one documented relaxation, described below.
 2. The app name is identical across `manifest.json`, `declarativeAgent.json`, and `ai-plugin.json`. Store validation rejects the package when the three disagree.
 3. Character limits on every length-capped field.
-4. Copy rules on agent-visible text: no URLs, no non-ASCII characters, no marketing superlatives, and none of the words banned by ADR-009.
+4. Copy rules on the store-facing and agent-visible text across all three files: no URLs, no non-ASCII characters, no marketing superlatives or ranking claims, no response-format commands, and none of the words banned by ADR-009.
 5. Icon dimensions.
+6. The packaging path, in CI: the workflow builds the zip with a throwaway auth id, then asserts the five members sit at the zip root, that the JSON members parse, and that `reference_id` carries the id it was given. That artifact is discarded and never uploaded.
 
-One relaxation is documented inline in `scripts/validate.sh`. The published v2.4 plugin schema defines `runtime.spec` as a `oneOf` whose OpenAPI and MCP branches both accept a bare `{"url": ...}`, so any conformant remote-MCP plugin matches two branches and fails validation. The gate turns that branch into an `anyOf`, then validates the spec against the one subschema its declared runtime type selects.
+The gate then prints a `[MANUAL]` line for each store rule it does not check, so a green run is not read as store readiness. Grammar, whether the two icons look like each other and like the brand, and whether the instructions produce good agent behavior are human checks. Microsoft-side acceptance is established by sideloading the built package and then by Partner Center review, not by schema conformance here.
+
+### The one relaxation
+
+The published v2.4 plugin schema defines `runtime.spec` as a `oneOf`, and its OpenAPI branch accepts a bare `{"url": ...}` exactly as the MCP branch does. A `RemoteMCPServer` that omits `mcp_tool_description` therefore matches two branches and fails `oneOf`, even though omitting it is how Microsoft documents dynamic tool discovery. The collision is specific to that shape: adding `mcp_tool_description` to pin tools makes the spec match the MCP branch alone and validate cleanly, so pinned-tool plugins never hit this.
+
+`ai-plugin.json` keeps the documented dynamic-discovery form. `scripts/validate.sh` turns that single `oneOf` into an `anyOf` and then validates the spec against the one subschema its declared runtime type selects. Nothing else in the schema is touched.
 
 ## Icons
 
@@ -75,6 +90,8 @@ python3 scripts/render-icons.py
 ```
 
 `color.png` sits the full mark inside the 120x120 safe region of a 192x192 violet plate. `outline.png` drops the wordmark and recenters the "AI" inside the frame, because at 32 pixels the wordmark aliases into an unreadable smear.
+
+That makes the outline icon a simplification of the mark rather than a scaled copy of it, which is an accepted risk. If store review flags the two icons as mismatched, regenerate `outline.png` from the full mark and take the loss in legibility.
 
 ## License
 

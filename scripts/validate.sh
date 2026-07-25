@@ -163,10 +163,10 @@ for label, value, limit in limits:
 
 # --- 4. content lint -------------------------------------------------------
 BANNED_WORDS = [
-    # Microsoft store review: no marketing superlatives.
-    "best", "#1", "amazing", "awesome", "world-class", "leading",
-    # Prompt-injection shaped phrases.
-    "ignore", "reset", "new instructions",
+    # Microsoft store review: no marketing superlatives or ranking claims.
+    "best", "#1", "amazing", "awesome", "world-class", "leading", "top ranked",
+    # Prompt-injection shaped phrases and response-format commands.
+    "ignore", "reset", "new instructions", "answer in bold", "do not print",
     # ADR-009 anti-slop banned vocabulary.
     "delve", "leverage", "utilize", "seamless", "harness", "foster", "facilitate",
     "cutting-edge", "groundbreaking", "transformative", "holistic", "bespoke",
@@ -174,6 +174,10 @@ BANNED_WORDS = [
     "tapestry", "realm", "testament", "multifaceted", "unleash", "underscore",
 ]
 linted = {
+    "manifest.name.short": manifest["name"]["short"],
+    "manifest.name.full": manifest["name"]["full"],
+    "manifest.description.short": manifest["description"]["short"],
+    "manifest.description.full": manifest["description"]["full"],
     "declarativeAgent.description": da["description"],
     "declarativeAgent.instructions": da["instructions"],
     "declarativeAgent.disclaimer.text": da["disclaimer"]["text"],
@@ -206,9 +210,26 @@ check(da["actions"][0]["file"] == "ai-plugin.json", "declarative agent reference
 for ref in (manifest["icons"]["color"], manifest["icons"]["outline"]):
     check(os.path.isfile(os.path.join(PKG, ref)), f"icon {ref} exists in appPackage")
 
+# --- 7. store rules this gate does NOT check ------------------------------
+# Printed so a green run is not read as store readiness. Each line is a rule
+# Microsoft applies that no assertion here covers.
+MANUAL_NOTES = [
+    "Grammar, spelling, and tone of the store-facing copy are not checked; read manifest.json and declarativeAgent.json before submitting.",
+    "Icons are checked for pixel dimensions only. Whether color.png and outline.png look like each other, match the Ansvar brand, and stay legible at display size needs human eyes.",
+    "outline.png simplifies the mark by dropping the wordmark for legibility at 32 px, so it is deliberately not a scaled copy of color.png.",
+    "Prompt functionality is not exercised: nothing here runs the instructions against the gateway to confirm the agent answers and cites correctly.",
+    "The OAuth path is not exercised: no check confirms AUTH_CONFIG_ID resolves to a working Teams Developer Portal registration, or that the gateway accepts the issued token.",
+    "Microsoft-side acceptance is established by sideloading the built package and by Partner Center review, not by schema conformance.",
+    "ai-plugin.json is validated against the published v2.4 schema with one documented relaxation (see check 1); manifest.json and declarativeAgent.json are validated against unmodified schemas.",
+]
+print()
+print("  Not checked mechanically:")
+for note in MANUAL_NOTES:
+    print(f"  [MANUAL] {note}")
+
 print()
 if failures:
     print(f"FAILED: {len(failures)} check(s): " + "; ".join(failures))
     sys.exit(1)
-print("All checks passed.")
+print(f"All mechanical checks passed. {len(MANUAL_NOTES)} rule(s) still need a human pass (see MANUAL above).")
 PY
