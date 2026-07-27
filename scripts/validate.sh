@@ -189,11 +189,25 @@ for i, starter in enumerate(da["conversation_starters"]):
     if "title" in starter:
         linted[f"conversation_starters[{i}].title"] = starter["title"]
 
+# The long description is the one surface Microsoft asks to CARRY hyperlinks
+# (validation round 1, good-to-fix 1: hyperlink contact / get-started / sign-up,
+# markdown formatting in the manifest). Only ansvar.eu-family markdown links are
+# allowed there; the blanket no-URL rule stays for every other surface —
+# instructions and conversation starters must remain link-free.
+URL_ALLOWED = {"manifest.description.full"}
+ANSVAR_LINK = re.compile(
+    r"\]\((?:https://(?:[a-z0-9-]+\.)?ansvar\.eu(?:/[^)\s]*)?|mailto:[a-z0-9._%+-]+@ansvar\.eu)\)")
+
 for label, text in linted.items():
     lowered = text.lower()
     hits = [w for w in BANNED_WORDS if w in lowered]
     check(not hits, f"{label} free of banned words", ", ".join(hits))
-    check(not re.search(r"https?://", text), f"{label} free of URLs")
+    if label in URL_ALLOWED:
+        residue = ANSVAR_LINK.sub("](link)", text)
+        check(not re.search(r"https?://|mailto:", residue),
+              f"{label} carries only ansvar.eu markdown links")
+    else:
+        check(not re.search(r"https?://", text), f"{label} free of URLs")
     # ASCII printable plus newline only: rules out emoji and symbol characters.
     offenders = sorted({c for c in text if not (0x20 <= ord(c) <= 0x7E or c == "\n")})
     check(not offenders, f"{label} is plain ASCII", " ".join(f"U+{ord(c):04X}" for c in offenders))
@@ -216,7 +230,7 @@ for ref in (manifest["icons"]["color"], manifest["icons"]["outline"]):
 MANUAL_NOTES = [
     "Grammar, spelling, and tone of the store-facing copy are not checked; read manifest.json and declarativeAgent.json before submitting.",
     "Icons are checked for pixel dimensions only. Whether color.png and outline.png look like each other, match the Ansvar brand, and stay legible at display size needs human eyes.",
-    "outline.png simplifies the mark by dropping the wordmark for legibility at 32 px, so it is deliberately not a scaled copy of color.png.",
+    "outline.png must stay the SAME full glyph as color.png, white on transparent (store rule: outline identical to colour in design; validation round 1, issue 7). Eyeball both after any re-render.",
     "Prompt functionality is not exercised: nothing here runs the instructions against the gateway to confirm the agent answers and cites correctly.",
     "The OAuth path is not exercised: no check confirms AUTH_CONFIG_ID resolves to a working Teams Developer Portal registration, or that the gateway accepts the issued token.",
     "Microsoft-side acceptance is established by sideloading the built package and by Partner Center review, not by schema conformance.",

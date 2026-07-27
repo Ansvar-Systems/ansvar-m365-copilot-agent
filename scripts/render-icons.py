@@ -6,9 +6,11 @@ outline-converted vector with no font dependency: one violet plate plus one
 off-white glyph path (a ruled frame enclosing the "ANSVAR" wordmark and "AI").
 
 color.png   192x192, brand-violet plate, full glyph inside the 120x120 safe region.
-outline.png 32x32, pure white on transparent. The wordmark is dropped and "AI" is
-            recentred in the frame: at 32 px the wordmark aliases into an
-            illegible smear, while the frame and "AI" stay crisp.
+outline.png 32x32, pure white on transparent, the SAME full glyph as color.png.
+            Store validation requires the outline icon to be identical to the
+            colour icon in design (Teams store guidelines; validation round 1,
+            issue 7) — do not simplify or recompose the glyph here even where a
+            reduced mark would render crisper at 32 px.
 
 Run: python3 scripts/render-icons.py
 """
@@ -25,14 +27,6 @@ OUT = ROOT / "appPackage"
 
 BRAND = (0x63, 0x55, 0xE6, 0xFF)  # #6355E6, the plate colour in the source mark
 GLYPH_OFF_WHITE = "#f3f6f6"
-
-# Glyph bands, as fractions of the glyph's own bounding box. Measured from the
-# source path's row ink profile; re-measure if the brand mark is redrawn.
-WORDMARK_BAND = (0.140, 0.310)
-AI_BAND = (0.315, 0.860)
-FRAME_INSET_X = 0.030
-FRAME_INTERIOR_Y = (0.030, 0.970)
-
 
 def glyph(colour: str, size: int = 2400) -> Image.Image:
     """Render the mark's glyph path alone, cropped to its ink, in `colour`."""
@@ -55,24 +49,11 @@ def render_color() -> None:
 
 def render_outline() -> None:
     g = glyph("#ffffff")
-    w, h = g.size
-    pix = g.load()
-    inset = int(FRAME_INSET_X * w)
-
-    ai = g.crop((inset, int(AI_BAND[0] * h), w - inset, int(AI_BAND[1] * h)))
-    ai = ai.crop(ai.getbbox())
-
-    # Clear the frame interior (wordmark + old "AI"), keeping the ruled frame.
-    for y in range(int(WORDMARK_BAND[0] * h), int(AI_BAND[1] * h)):
-        for x in range(inset, w - inset):
-            pix[x, y] = (0, 0, 0, 0)
-
-    top = int(FRAME_INTERIOR_Y[0] * h)
-    bottom = int(FRAME_INTERIOR_Y[1] * h)
-    g.alpha_composite(ai, ((w - ai.width) // 2, top + ((bottom - top) - ai.height) // 2))
-
-    g.resize((32, 32), Image.LANCZOS).save(OUT / "outline.png")
-    print("outline.png  32x32  white frame + recentred AI on transparent")
+    g.thumbnail((32, 32), Image.LANCZOS)
+    canvas = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+    canvas.alpha_composite(g, ((32 - g.width) // 2, (32 - g.height) // 2))
+    canvas.save(OUT / "outline.png")
+    print("outline.png  32x32  full glyph, white on transparent")
 
 
 if __name__ == "__main__":
