@@ -67,7 +67,6 @@
         "map_controls",
         "recommend_subagents",
         "record_review_decision",
-        "register_document",
         "register_document_finalize",
         "register_document_init",
         "register_document_text",
@@ -82,7 +81,6 @@
         "simulate_control_investment",
         "start_workflow",
         "submit_response",
-        "unregister_document",
         "validate_citation",
         "verify_receipt"
       ],
