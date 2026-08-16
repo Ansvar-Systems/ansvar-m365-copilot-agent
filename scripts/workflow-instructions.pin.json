@@ -1,6 +1,6 @@
 {
   "repo": "Ansvar-Systems/ansvar-workflow-mcp",
-  "commit": "482c0215062a216282bd3aa54e341f1cff6ba082",
-  "manifest_sha256": "f4fd5bbef9a5aef1a8304769930b32b6291c471f7183b68fb0c5175b6bafb07d",
-  "artifact_sha256": "d4682d94265b9282a84d6b23a4b99e0d30989d370520fb7ef03dc69a20c2e755"
+  "commit": "5fae024377b9fecac45828f84c66af1d80b172f1",
+  "manifest_sha256": "f5a3629b22a2549bd9bcf50394b4aec1a9d3ce95268d3e9f68cedbbc2656fdc2",
+  "artifact_sha256": "6845a3b9e2196e57d7dacaf49dfa015868d297568071244363e6f870cb633bcf"
 }
