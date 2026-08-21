@@ -9,7 +9,7 @@ This repository holds the app package submitted to Microsoft through Partner Cen
 ```
 appPackage/
   manifest.json          Microsoft 365 app manifest (schema 1.25)
-  declarativeAgent.json  name, description, instructions, conversation starters (schema v1.8)
+  declarativeAgent.json  name, description, instructions, behavior overrides, conversation starters (schema v1.8)
   ai-plugin.json         API plugin manifest pointing at the MCP gateway (schema v2.4)
   color.png              192x192
   outline.png            32x32
