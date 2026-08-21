@@ -159,6 +159,9 @@ check(len(set(names.values())) == 1, "app name identical in all three files", re
 # --- 3. character limits ---------------------------------------------------
 limits = [
     ("plugin.description_for_human", plugin["description_for_human"], 100),
+    # v2.4 documents that characters beyond 2048 may be ignored at run time, so
+    # text past the cap is a silent no-op, not a store rejection - fail here.
+    ("plugin.description_for_model", plugin["description_for_model"], 2048),
     ("declarativeAgent.description", da["description"], 1000),
     ("declarativeAgent.instructions", da["instructions"], 8000),
     ("declarativeAgent.disclaimer.text", da["disclaimer"]["text"], 500),
