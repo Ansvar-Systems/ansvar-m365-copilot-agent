@@ -54,7 +54,7 @@ To move to a newer workflow-mcp release, update `commit` and `manifest_sha256` t
 
 ### Version 2.0.6 is staged, not submitted
 
-Version 2.0.4 is live in the store. Version 2.0.5 was submitted as an update (ticket #5744981) and is under Microsoft validation; Microsoft re-tests the copy it already holds unless a new package is uploaded. Version 2.0.6 changes only the version number and the Risk scoring and Review decisions paragraphs of `instructions`: since ADR-132 (2026-09-27) the effective-risk engine keeps no stored scoring context, and the review chain passes signed review tokens, which Microsoft 365 Copilot carries reliably only within one response. It has been uploaded nowhere; whether it replaces 2.0.5 in the submission is a founder decision.
+Version 2.0.4 is live in the store. Version 2.0.5 was submitted as an update (ticket #5744981) and is under Microsoft validation; Microsoft re-tests the copy it already holds unless a new package is uploaded. Version 2.0.6 changes only the version number and the Risk scoring and Review decisions paragraphs of `instructions`: since ADR-132 (2026-09-27) the effective-risk engine keeps no stored scoring context, and the review chain passes signed review tokens, which Microsoft 365 Copilot carried intact within one response in our 2026-10-13 tests and cut short across turns. It has been uploaded nowhere; whether it replaces 2.0.5 in the submission is a founder decision.
 
 ## Authentication
 
