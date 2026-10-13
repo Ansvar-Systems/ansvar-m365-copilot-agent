@@ -52,11 +52,9 @@ python3 scripts/import-workflow-instructions.py --check    # gate: the committed
 
 To move to a newer workflow-mcp release, update `commit` and `manifest_sha256` together — a commit moved without its manifest sha is an unverified import — then re-run the importer, run `./scripts/validate.sh`, and bump the app version. The 8000-character limit on `instructions` is the real ceiling, and these two paragraphs are the part that grows.
 
-### Version 2.0.5 is staged, not submitted
+### Version 2.0.6 is staged, not submitted
 
-The current package version is 2.0.5 and it has been uploaded nowhere. Version 2.0.4 stands as the submitted package and is under Microsoft validation (ticket #5636924). The ratified decision is that there is no Partner Center resubmission before Microsoft's go-ahead on that review.
-
-When the go-ahead arrives, 2.0.5 ships through the Teams admin center "New version" path described in the arch-docs runbook `docs/runbooks/m365-copilot-store-submission.md`.
+Version 2.0.4 is live in the store. Version 2.0.5 was submitted as an update (ticket #5744981) and is under Microsoft validation; Microsoft re-tests the copy it already holds unless a new package is uploaded. Version 2.0.6 changes only the version number and the Risk scoring and Review decisions paragraphs of `instructions`: since ADR-132 (2026-09-27) the effective-risk engine keeps no stored scoring context, and the review chain passes signed review tokens, which Microsoft 365 Copilot carried intact within one response in our 2026-10-13 tests and cut short across turns. It has been uploaded nowhere; whether it replaces 2.0.5 in the submission is a founder decision.
 
 ## Authentication
 
